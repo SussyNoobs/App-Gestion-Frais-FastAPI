@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Gestion des frais</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        h2 {
+            margin-bottom: 10px;
+        }
+
+        form {
+            margin-bottom: 20px;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="number"] {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        button[type="submit"] {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button[type="submit"]:hover {
+            background-color: #45a049;
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        .expense-item {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .message {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+
+        .message.error {
+            background-color: #f44336;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <h1>Gestion des frais</h1>
+
+    <!-- Formulaire de connexion -->
+    <form id="login-form">
+        <h2>Connexion</h2>
+        <input type="text" id="username" placeholder="Nom d'utilisateur" required>
+        <input type="password" id="password" placeholder="Mot de passe" required>
+        <button type="submit">Se connecter</button>
+    </form>
+
+    <!-- Formulaire d'ajout de dépense -->
+    <form id="expense-form" style="display: none;">
+        <h2>Ajouter une dépense</h2>
+        <input type="text" id="title" placeholder="Titre" required>
+        <input type="number" id="amount" placeholder="Montant" required>
+        <label for="category">Catégorie :</label>
+        <select id="category" name="category" required>
+            <option value="Hotellerie">Hôtellerie</option>
+            <option value="Repas">Repas</option>
+            <option value="Transports">Transports</option>
+        </select>
+        <button type="submit">Ajouter</button>
+    </form>
+
+    <!-- Liste des dépenses -->
+    <h2>Liste des dépenses</h2>
+    <ul id="expense-list" class="expense-list"></ul>
+
+    <!-- Message d'erreur -->
+    <div id="message" class="message" style="display: none;"></div>
+
+     <!-- Bouton de téléchargement de la facture -->
+    <button id="download-invoice-btn" style="display: none;">Télécharger la facture</button>
+
+
+    <script>
+        // Fonction utilitaire pour effectuer des requêtes HTTP
+        async function fetchAPI(url, method = 'GET', data = null) {
+            const username = localStorage.getItem('username');
+            const password = localStorage.getItem('password');
+
+            const response = await fetch(url, {
+                method: method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Basic ${btoa(`${username}:${password}`)}`
+                },
+                body: data ? JSON.stringify(data) : null
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail);
+            }
+
+            if (response.status === 204) {
+                return null;
+            }
+
+            return await response.json();
+        }
+
+        // Fonction pour afficher les dépenses
+        async function displayExpenses() {
+            if (!isLoggedIn()) {
+                return;
+            }
+
+            document.getElementById('expense-form').style.display = 'block';
+
+            const expenseList = document.getElementById('expense-list');
+            expenseList.innerHTML = '';
+
+            try {
+                const expenses = await fetchAPI('/expenses/');
+                expenses.forEach(expense => {
+                    const expenseItem = document.createElement('li');
+                    expenseItem.className = 'expense-item';
+
+                    const title = document.createElement('span');
+                    title.textContent = expense.title;
+                    expenseItem.appendChild(title);
+
+                    const id = document.createElement('span');
+                    id.textContent = expense.id;
+                    expenseItem.appendChild(id);
+
+                    const amount = document.createElement('span');
+                    amount.textContent = `$${expense.amount.toFixed(2)}`;
+                    expenseItem.appendChild(amount);
+
+                    const category = document.createElement('span');
+                    category.textContent = expense.category;
+                    expenseItem.appendChild(category);
+
+                    const deleteButton = document.createElement('button');
+                    deleteButton.textContent = 'Supprimer';
+                    deleteButton.addEventListener('click', () => deleteExpense(expense.id));
+                    expenseItem.appendChild(deleteButton);
+
+                    const downloadButton = document.createElement('button');
+                    downloadButton.textContent = 'Télécharger la facture';
+                    downloadButton.addEventListener('click', () => downloadInvoice(expense.id));
+                    expenseItem.appendChild(downloadButton);
+
+                    expenseList.appendChild(expenseItem);
+                });
+
+            } catch (error) {
+                showMessage(error.message, 'error');
+            }
+        }
+
+            async function downloadInvoice(expenseId) {
+  try {
+    const response = await fetch(`/invoices/${expenseId}`);
+    const fileBlob = await response.blob();
+
+    // Créer un lien de téléchargement
+    const downloadLink = document.createElement('a');
+    downloadLink.href = URL.createObjectURL(fileBlob);
+    downloadLink.download = `facture_${expenseId}.pdf`;
+
+    // Simuler un clic sur le lien pour déclencher le téléchargement
+    downloadLink.click();
+  } catch (error) {
+    showMessage(error.message, 'error');
+  }
+}
+
+
+        // Écouteur d'événement pour le bouton de téléchargement de la facture
+        document.getElementById('download-invoice-btn').addEventListener('click', downloadInvoice);
+
+        // Fonction pour ajouter une dépense
+        async function addExpense(event) {
+            event.preventDefault();
+
+            const titleInput = document.getElementById('title');
+            const amountInput = document.getElementById('amount');
+            const categoryInput = document.getElementById('category');
+
+            const title = titleInput.value;
+            const amount = parseFloat(amountInput.value);
+            const category = categoryInput.value;
+
+            const data = {
+                title: title,
+                amount: amount,
+                category: category
+            };
+
+            try {
+                await fetchAPI('/expenses/', 'POST', data);
+                titleInput.value = '';
+                amountInput.value = '';
+                categoryInput.value = '';
+                displayExpenses();
+            } catch (error) {
+                showMessage(error.message, 'error');
+            }
+        }
+
+        // Fonction pour supprimer une dépense
+        async function deleteExpense(expenseId) {
+            try {
+                await fetchAPI(`/expenses/${expenseId}`, 'DELETE');
+                displayExpenses();
+            } catch (error) {
+                showMessage(error.message, 'error');
+            }
+        }
+
+        // Fonction pour afficher un message
+        function showMessage(message, messageType) {
+            const messageElement = document.getElementById('message');
+            messageElement.textContent = message;
+            messageElement.style.display = 'block';
+
+            if (messageType === 'error') {
+                messageElement.classList.add('error');
+            } else {
+                messageElement.classList.remove('error');
+            }
+        }
+
+        // Fonction pour vérifier si l'utilisateur est connecté
+        function isLoggedIn() {
+            const username = localStorage.getItem('username');
+            const password = localStorage.getItem('password');
+            return username && password;
+        }
+
+        // Gestionnaire d'événement pour le formulaire de connexion
+        document.getElementById('login-form').addEventListener('submit', handleLogin);
+
+        // Gestionnaire d'événement pour le formulaire d'ajout de dépense
+        document.getElementById('expense-form').addEventListener('submit', addExpense);
+
+        // Chargement initial des dépenses
+        displayExpenses();
+
+        // Fonction pour vérifier les informations de connexion
+        function checkCredentials(username, password) {
+            return username === 'Adam' && password === 'Taka';
+        }
+
+        // Fonction pour gérer la soumission du formulaire de connexion
+        async function handleLogin(event) {
+            event.preventDefault();
+
+            const usernameInput = document.getElementById('username');
+            const passwordInput = document.getElementById('password');
+
+            const username = usernameInput.value;
+            const password = passwordInput.value;
+
+        // Vérifier les informations de connexion
+        if (checkCredentials(username, password)) {
+        // Stocker les informations d'authentification dans le localStorage
+            localStorage.setItem('username', username);
+            localStorage.setItem('password', password);
+
+        // Effacer les champs du formulaire de connexion
+            usernameInput.value = '';
+            passwordInput.value = '';
+
+        // Afficher les dépenses
+            displayExpenses();
+        } else {
+            showMessage('Identifiant ou mot de passe incorrect.', 'error');
+        }
+    }
+
+        // Fonction pour vérifier si l'utilisateur est connecté
+        function isLoggedIn() {
+            const username = localStorage.getItem('username');
+            const password = localStorage.getItem('password');
+            return checkCredentials(username, password);
+        }
+
+    </script>
+</body>
+</html>

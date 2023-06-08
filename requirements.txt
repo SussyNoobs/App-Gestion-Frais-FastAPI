@@ -1,0 +1,11 @@
+xhtml2pdf==0.2.11
+reportlab==3.6.13
+pypdf=3.9.1
+SQLAlchemy==2.0.15
+Pymysql==1.0.3
+Jinja2==3.1.2
+fastapi==0.96.0
+fastapi-admin==1.0.4
+fastapi-contrib==0.2.11
+uvicorn==0.22.0
+fpdf==1.7.2
